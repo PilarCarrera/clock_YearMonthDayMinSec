@@ -1,0 +1,226 @@
+@ Driver del System Timer gestionado por interrupciones
+@ Funciones:
+@	ST_Intr: Inicia el System Timer para que ejecute una tarea
+@                    de forma periodica
+@	ST_RTI: Rutina de atencion que ejecuta la tarea de forma periodica
+@	ST_Off: Detinene la ejecucion de la tarea
+@
+.globl ST_Intr
+.globl ST_Off
+
+.global LCD_Ini
+
+
+@Constantes del System Timer
+.equ SysTimer, 0x20003000
+.equ ST_CS,  0x000
+.equ ST_CLO, 0x004
+.equ ST_CHI, 0x008
+.equ ST_C0,  0x00C
+.equ ST_C1,  0x010
+.equ ST_C2,  0x014
+.equ ST_C3,  0x018
+
+@parametros de entrada
+
+.align 2
+duracionPeriodo: .word 0x0  @en milisegundos
+
+.align 2
+dir_funcion:     .word 0x0  @direccion de la funciom que debe ejecutarse
+
+Num_Ejec:        .word 0x6
+
+@ Constantes del Controlador de Interrupciones
+.set CI_base,  0x2000B200
+.set CI_BascP, 0x00
+.set CI_IRQ1P, 0x04
+.set CI_IRQ2P, 0x08
+.set CI_BascE, 0x18
+.set CI_IRQ1E, 0x10
+.set CI_IRQ2E, 0x14
+.set CI_BascD, 0x24
+.set CI_IRQ1D, 0x1C
+.set CI_IRQ2D, 0x20
+
+.equ    FALSE,		0x00
+.equ	TRUE,		0x01
+
+
+@ varibles del driver
+.data
+.align 2
+Log_dir_ST:	.word  FALSE
+Log_dir_CI:	.word  FALSE
+
+
+.Text
+
+
+@ Rutina que inicializa el dispositivo
+@
+@ PARAMETROS:
+@@ R0: duracion del periodo en milisegundos
+@@ R1: direccion de la funcion a ejecutar
+@
+ST_Intr:
+
+@ se guardan los registros en el stack
+
+STMDB  sp!, {R4-R7, LR}
+
+@guardamos en memoria los parametros
+
+LDR R6, =duracionPeriodo
+
+MOV R3, #0x3E8
+MUL R2, R0, R3
+STR R2, [R6]
+
+LDR R7, =dir_funcion
+STR R1, [R7]
+
+@Entramos en modo sistema
+
+SWI 0x16
+
+@calcular direccion logica del timer
+
+LDR R6, =Log_dir_ST
+
+MOV R0, #13
+LDR R1, =SysTimer
+MOV R2, #0x100
+
+SWI 0x68
+
+MOV R4, R3
+STR R4, [R6]
+
+@calcular direccion logica del CI_base
+
+LDR R6, =Log_dir_CI
+
+MOV R0, #13
+LDR R1, =CI_base
+MOV R2, #0x100
+
+SWI 0x68
+
+MOV R5, R3
+
+STR R5, [R6]
+
+
+@elimina interrupciones anteriores del timer
+
+MOV R1, #8
+STR R1, [R4, #ST_CS]
+
+@se ejecuta la tarea
+
+MOV R0, #3
+LDR R1, =ST_RTI
+
+MOV R2, #0
+MOV R3, #0
+MOV R4, #0
+
+SWI 0x4B
+
+@habilitamos las interrupciones
+
+LDR R0, =Log_dir_CI
+LDR R0, [R0]
+
+MOV R1, #8
+STR R1, [R0, #CI_IRQ1E]
+
+
+@programamos el timer con el parametro que nos ha dado el usuario
+
+LDR R4, =Log_dir_ST
+LDR R4, [R4]
+
+LDR R1, [R4, #ST_CLO]
+
+@cargamos la duracion del periodo
+LDR R2, =duracionPeriodo
+LDR R2, [R2]
+
+ADD R1, R1, R2
+STR R1, [R4, #ST_C3]
+
+SWI 0x7C
+
+LDMIA SP!, {R4-R7, PC}
+
+
+@Rutina de atencion a la interrupcion
+@
+ST_RTI:
+
+@salvamos el contexto
+STMDB SP!, {R0-R4, LR}
+
+@eliminamos la peticion de interrupcion
+
+LDR R3, =Log_dir_ST
+LDR R3, [R3]
+
+MOV R1, #8
+STR R1, [R3, #ST_CS]
+
+@llamamos a la rutina de la cual nos han pasado su
+@direccion
+
+LDR LR, =Ret_Addr
+
+LDR R0, =dir_funcion
+LDR R0, [R0]
+
+MOV PC, R0
+
+Ret_Addr:
+
+@cargamos la duracion del periodo
+
+LDR R4, =Log_dir_ST
+LDR R4, [R4]
+
+LDR R1, [R4, #ST_CLO]
+
+LDR R2, =duracionPeriodo
+LDR R2, [R2]
+
+ADD R1, R1, R2
+STR R1, [R4, #ST_C3]
+
+@recuperamos el contexto
+
+LDMIA SP!, {R0-R4, PC}
+
+@ Rutina que desactiva la gestion de las interrupciones
+@
+ST_Off:
+	stmdb 	SP!, {R4, LR}
+
+@ se detine la gestion de las interrupciones
+	mov 	R0, #3
+	ldr 	R1, =ST_RTI
+	mov 	R2, #0
+	mov 	R3, #0
+	mov 	R4, #0
+	SWI 	0x4C		@ OS_ReleaseDeviceVector
+
+@ se enmascara la interrupcion en el Controlador de Interrupciones
+
+	ldr 	R0, =Log_dir_CI
+	ldr 	R0, [R0]
+	mov 	R1, #0x08
+	SWI 	0x16
+	str 	R1, [R0, #CI_IRQ1D]
+	SWI 	0x7C
+
+	ldmia	SP!, {R4, PC}
+

@@ -1,0 +1,25 @@
+
+*dir Alumnos
+*dir pract04
+*as -o TP1.o TestParte1.s
+***as -o MH.o m_Hora.s
+***ld -Ttext=18088 -o TP1 TP1.o MH.o d_i2c.o d_lcd.o d_timer.o d_gpio.o IO_int.o
+
+
+
+dir Alumnos
+*dir pract04
+*
+*as -o d_ST.o d_SysTim.s
+*as -o T1.o T_Intr1.s
+*ld -Ttext=18088 -o T1 T1.o d_ST.o  d_i2c.o d_lcd.o d_timer.o d_gpio.o IO_int.o
+
+
+dir Alumnos
+*dir pract04
+*
+*as -o d_ST.o d_SysTim.s
+*as -o MH.o m_Hora.s
+as -o Est.o f_estat.s
+*as -o TP4.o T_Pr4.s
+*ld -Ttext=18088 -o TP4 TP4.o d_ST.o MH.o Est.o d_i2c.o d_lcd.o d_timer.o d_gpio.o IO_int.o

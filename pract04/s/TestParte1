@@ -1,0 +1,40 @@
+.data
+
+        .extern hora_Off
+        .extern hora_Init
+        .extern hora_Incr
+
+        .align 2
+HORA:   .word 0b000101110011101100110010
+
+        .align 2
+DIA:    .word 0b0111110100010000110000011110
+
+.global _start
+.text
+_start:
+
+LDR R0, =HORA
+LDR R0, [R0]
+
+LDR R1, =DIA
+LDR R1, [R1]
+
+BL hora_Init
+
+MOV R4, #0X2000
+
+BUCLE:
+
+CMP R4, #0
+BEQ FINBUCLE
+
+BL hora_Incr
+
+SUB R4, R4, #1
+B BUCLE
+
+FINBUCLE:
+
+
+SWI 0x11

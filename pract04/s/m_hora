@@ -1,0 +1,568 @@
+@ Modulo de gestion de hora y fecha
+@
+@ Funciones publicas:
+@     - hora_Init: inicializa el modulo determinando la hora inicial y la
+@         gestion de la hora usando el System timer. Recibe como parametros
+@         la hora inicial.
+@     - hora_Incr: incrementa en un segundo la hora actual y lo muestra
+@         en el LCD. No recibe parametros ni devuelve resultados.
+@     - hora_Off: detiene el proceso de mostrar la hora.
+@
+.global		hora_Init
+.global		hora_Incr
+.global		hora_Off
+
+.global         LCD_WChr
+.global         LCD_Ini
+.global         LCD_SetCursor
+.global         ST_Intr
+
+
+@  Variables del modulo
+.data
+
+
+.align 2
+Del_1Seg: .word 1000  @Retraso de 1 segundos
+
+.align 1
+SEGUNDOS: .byte 0
+
+.align 1
+MINUTOS: .byte 0
+
+.align 1
+HORA: .byte 0
+
+.align 1
+DIA: .byte 0
+
+.align 1
+MES: .byte 0
+
+.align 2
+ANYO: .hword 0
+
+.align 2
+MASCARA: .word 0xFFFF0000
+
+.align 1
+SEGUNDOSaCero: .byte 0x0
+
+.align 1
+MINUTOSaCero: .byte 0x0
+
+.align 1
+HORAaCero: .byte 0x0
+
+.align 1
+DIAaCero: .byte 0x0
+
+.align 1
+MESaCero: .byte 0x0
+
+.align 2
+ANYOaCero: .hword 0x0
+
+
+.extern         LCD_WChr
+.extern         LCD_SetCursor
+.extern         LCD_Ini
+.extern         ST_Intr
+
+@ Funciones
+.text
+
+@    Funcion que detiene el proceso de mostrar la hora.
+@
+hora_Off:
+	stmdb	SP!, {LR}
+
+@	bl	ST_Off		@ Se debe quitar el comentario de esta
+				@  instruccion en el apartado 3
+
+	ldmia 	SP!, {PC}
+
+
+@    Funcion que inicializa el lcd y el system timer
+@
+@    Parametros
+@    R0: la hora
+@
+@        bit 0- 7:   segundos
+@        bit 8- 15:  minutos
+@        bit 16- 23: hora
+@
+@    R1: La fecha
+@
+@        bit 0-7:    dia
+@        bit 8- 15:  mes
+@        bit 16- 23: anyo
+@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+
+hora_Init:
+
+	stmdb	SP!, {R4-R12, LR}
+
+@inicializamos la fecha y la hora
+
+MOV R4, R0 @hora
+MOV R5, R1 @fecha
+
+@inicializamos el lcd
+
+BL LCD_Ini
+
+@guardamos los segundos en memoria
+
+LDR R6, =SEGUNDOS
+
+AND R0, R4, #0b1111111 @para extraer los segundos
+STRB R0, [R6]
+
+@guardamos los minutos en memoria
+
+LDR R7, =MINUTOS
+
+AND R0, R4, #0b1111111100000000 @para extraer los minutos
+LSR R0, R0, #8
+
+STRB R0, [R7]
+
+@guardamos la hora en memoria
+
+LDR R8, =HORA
+
+AND R0, R4, #0b111111110000000000000000 @para extraer la hora
+LSR R0, R0, #16
+
+STRB R0, [R8]
+
+@guardamos el dia en memoria
+
+LDR R9, =DIA
+
+AND R0, R5, #0b11111111
+STRB R0, [R9]
+
+@Guardamos el mes en memoria
+
+LDR R10, =MES
+
+AND R0, R5, #0b1111111100000000
+LSR R0, R0, #8
+STRB R0, [R10]
+
+@guardamos el anyo en memoria
+
+LDR R11, =ANYO
+
+LDR R1, =MASCARA
+LDR R1, [R1]
+
+AND R0, R5, R1
+LSR R0, R0, #16
+
+STRH R0, [R11]
+
+@inicializamos el timer
+LDR R0, =Del_1Seg
+LDR R0, [R0]
+
+LDR R1,=hora_Incr
+BL ST_Intr
+
+
+@terminamos la funcion
+
+        LDMIA SP!, {R4-R12, LR}
+
+
+MOV PC, LR
+
+
+
+@@
+@     Funcion que incrementa un segundo el reloj y lo imprime en el
+@     LCD
+@
+hora_Incr:
+
+	stmdb	SP!, {R4-R12, LR}
+
+@variable para poner a 0
+MOV R11, #0
+
+LDR R4, =SEGUNDOS
+LDRB R4, [R4]
+
+LDR R6, =MINUTOS
+LDRB R6, [R6]
+
+LDR R7, =HORA
+LDRB R7, [R7]
+
+LDR R8, =DIA
+LDRB R8, [R8]
+
+LDR R9, =MES
+LDRB R9, [R9]
+
+LDR R10, =ANYO
+LDRH R10, [R10]
+
+
+
+@ hacemos un segundo de prueba, si vemos que al sumarle
+@ uno se pasa de 60, pponemos los segundos a 0 y pasamos
+@a modificar los minutos
+
+MOV R5, R4
+
+@sumamos uno al segundo de prueba
+
+ADD R5, R5, #0b1
+
+@Comparamos con 60
+
+CMP R5, #0x3C
+BLT sumamosUnSeg
+
+    @Ponemos los segundos a 0
+
+    LDR R4, =SEGUNDOS
+    STRB R11, [R4]
+
+    @vemos si pasa lo mismo con los minutos, si
+    @supera los 60 minutos pasa a modificar la hora
+
+    MOV R5, R6
+
+    ADD R5, R5, #0b1
+
+    @vemos si es mayor que 60
+
+    CMP R5, #0x3C
+    BLT sumamosMinuto
+
+        @Ponemos los minutos a 0
+        LDR R5, =MINUTOS
+        STRB R11, [R5]
+
+        @comprobamos lo mismo con la hora, sumando al dia si
+        @supera 24
+
+        MOV R5, R7
+
+        ADD R5, R5, #0b1
+
+        @comprobamos si es mayor de 24
+
+        CMP R5, #0x18
+        BLT sumamosHora
+
+            @Ponemos las horas a 0
+            LDR R7, =HORA
+            STRB R11, [R7]
+
+            @hacemos lo mismo con los dias
+
+            MOV R5, R8
+            ADD R5, R5, #0b1
+
+            @si es mayor que 30, lo ponemos a 0 y vemos el mes
+
+            CMP R5, #0x1E
+            BLT sumamosDia
+
+                @Ponemos el dia a 1
+                MOV R11, #0x1
+                LDR R8, =DIA
+                STRB R11, [R8]
+
+                @hacemos lo mismo con los meses
+
+                MOV R5, R9
+                ADD R9, R9, #0b1
+
+                @si es mayor que 12, lo ponemos a 0 y vemos el anyo
+
+                CMP R9, #0xC
+                BLT sumamosMes
+
+                    @ponemos los meses a 1
+                    MOV R11, #0x1
+                    LDR R9, =MES
+                    STRB R11, [R9]
+
+                    @si hemos llegado hasta aqui es que hay que sumar
+                    @uno al anyo
+
+                    B sumaUnAnyo
+
+
+
+
+sumamosUnSeg:
+
+LDR R4, =SEGUNDOS
+STRB R5, [R4]
+b fin
+
+sumamosMinuto:
+
+LDR R6, =MINUTOS
+STRB R5, [R6]
+b fin
+
+sumamosHora:
+
+LDR R7, =HORA
+STRB R5, [R7]
+b fin
+
+sumamosDia:
+
+LDR R8, =DIA
+STRB R5, [R8]
+b fin
+
+sumamosMes:
+
+LDR R9, =MES
+STRB R5, [R9]
+b fin
+
+sumaUnAnyo:
+
+MOV R5, R10
+ADD R5, R5, #1
+
+LDR R10, =ANYO
+STRH R5, [R10]
+
+
+fin:
+
+@lo mostramos por pantalla
+
+
+MOV R0, #0x0
+BL imprimirPalabra
+
+MOV R0, #0x1
+BL imprimirPalabra
+
+@esperamos un segundo
+
+LDR R0, =Del_1Seg
+ldr r0, [r0]
+BL ST_Delay
+
+        LDMIA SP!, {R4-R12, LR}
+
+MOV PC, LR
+
+@@@@@@@@@@@@@@@@@@@@@@
+@@Funcion que te iprime la palabra en el LCD
+@@
+@@R0: linea donde quiero que este
+@@
+@@@@@@@@@@@@@@@@@@@@@@@@@
+imprimirPalabra:
+
+     stmdb SP!, {R4-R12, LR}
+
+
+ifLinea1:
+
+CMP R0, #0x0
+
+BNE linea2
+
+    @linea 1
+
+    LDR R7, =HORA
+    LDR R8, =MINUTOS
+    LDR R9, =SEGUNDOS
+
+    @movemos el puntero a la posicion indicada
+
+    MOV R0, #0x1
+    MOV R1, #0x5
+    BL LCD_SetCursor
+
+    @Imprimimos la hora
+
+    LDRB R6, [R7]
+    MOV R0, R6
+    BL Div_10
+
+    @guardo el resto
+    MOV R6, R1
+
+    @sumamos 30 al cociente
+    ADD R0, R0, #0x30
+    BL LCD_WChr
+
+    @sumamos 30 al resto
+    ADD R6, R6, #0x30
+    MOV R0, R6
+    BL LCD_WChr
+
+    @imprimimos los dos puntos
+    MOV R0, #0x3A
+    BL LCD_WChr
+
+    @mprimimos los minutos
+
+    LDRB R6, [R8]
+    MOV R0, R6
+    BL Div_10
+
+    @guardo el resto
+    MOV R6, R1
+
+    @sumamos 30 al cociente
+    ADD R0, R0, #0x30
+    BL LCD_WChr
+
+    @sumamos 30 al resto
+    ADD R6, R6, #0x30
+    MOV R0, R6
+    BL LCD_WChr
+
+    @imprimimos los dos puntos
+    MOV R0, #0x3A
+    BL LCD_WChr
+
+    @imprimimos los segundos
+
+    LDRB R6, [R9]
+    MOV R0, R6
+    BL Div_10
+
+    @guardo el resto
+    MOV R6, R1
+
+    @sumamos 30 al cociente
+    ADD R0, R0, #0x30
+    BL LCD_WChr
+
+    @sumamos 30 al resto
+    ADD R6, R6, #0x30
+    MOV R0, R6
+    BL LCD_WChr
+
+
+
+b FINFUNCION
+
+
+linea2:
+
+ @cargamos los datos necesarios
+
+    LDR R7, =DIA
+    LDR R8, =MES
+    LDR R9, =ANYO
+
+ @movemos el puntero a la posicion indicada
+
+    MOV R0, #0x2
+    MOV R1, #0x4
+    BL LCD_SetCursor
+
+    @Imprimimos el dia
+
+    LDRB R6, [R7]
+    MOV R0, R6
+    BL Div_10
+
+    @guardo el resto
+    MOV R6, R1
+
+    @sumamos 30 al cociente
+    ADD R0, R0, #0x30
+    BL LCD_WChr
+
+    @sumamos 30 al resto
+    ADD R6, R6, #0x30
+    MOV R0, R6
+    BL LCD_WChr
+
+    @imprimimos los dos puntos
+    MOV R0, #0x2F
+    BL LCD_WChr
+
+    @mprimimos el mes
+
+    LDRB R6, [R8]
+    MOV R0, R6
+    BL Div_10
+
+    @guardo el resto
+    MOV R6, R1
+
+    @sumamos 30 al cociente
+    ADD R0, R0, #0x30
+    BL LCD_WChr
+
+    @sumamos 30 al resto
+    ADD R6, R6, #0x30
+    MOV R0, R6
+    BL LCD_WChr
+
+    @imprimimos los dos puntos
+    MOV R0, #0x2F
+    BL LCD_WChr
+
+    @imprimimos el anyo
+
+    LDRH R6, [R9]
+    MOV R0, R6
+    BL Div_10
+
+    @Guardamos el resto
+    @ultima cifra
+
+    MOV R6, R1
+
+    BL Div_10
+
+    @Guardamos la penultima cifra
+
+    MOV R7, R1
+
+    BL Div_10
+
+    MOV R8, R1
+    MOV R9, R0
+
+    @imprimos el anyo en orden
+
+    ADD R9, R9, #0x30
+    MOV R0, R9
+    BL LCD_WChr
+
+    ADD R8, R8, #0x30
+    MOV R0, R8
+    BL LCD_WChr
+
+    ADD R7, R7, #0x30
+    MOV R0, R7
+    BL LCD_WChr
+
+    ADD R6,R6, #0x30
+    MOV R0, R6
+    BL LCD_WChr
+
+FINFUNCION:
+
+
+  LDMIA SP!, {R4-R12, LR}
+
+
+MOV PC, LR

@@ -1,0 +1,19 @@
+.data
+
+        .extern hora_Off
+        .extern hora_Init
+        .extern hora_Incr
+
+HORA:   .word 0b000000010000000000000000
+DIA:    .word 0b000000110000000000000000
+
+.text
+
+LDR R0, =HORA
+LDR R0, [R0]
+
+LDR R1, =DIA
+LDR R1, [R1]
+
+BL hora_Init
+BL hora_Incr
